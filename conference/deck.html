@@ -18,8 +18,8 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:#05030c;overflow:hidden}
 body{font-family:"Rubik",sans-serif;color:#fff;-webkit-font-smoothing:antialiased}
-#viewport{position:fixed;inset:0;display:grid;place-items:center}
-#stage{position:relative;width:1920px;height:1080px;transform-origin:center center;flex:none;overflow:hidden}
+#viewport{position:fixed;inset:0;overflow:hidden}
+#stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px;transform-origin:center center;overflow:hidden}
 .slide{position:absolute;inset:0;overflow:hidden;visibility:hidden;pointer-events:none}
 .slide.on{visibility:visible;pointer-events:auto;z-index:2}
 .slide.leaving{visibility:visible;z-index:3}
@@ -244,6 +244,8 @@ body{font-family:"Rubik",sans-serif;color:#fff;-webkit-font-smoothing:antialiase
 .cpill .pill{font-size:44px;font-weight:700;height:88px;padding:0 50px;direction:ltr}
 
 #hint{position:fixed;left:18px;bottom:14px;font:14px/1.4 "Rubik",sans-serif;color:rgba(255,255,255,.55);transition:opacity 1s;z-index:10}
+#rotate{display:none;position:fixed;left:0;right:0;bottom:12%;text-align:center;font:500 17px/1.5 "Rubik",sans-serif;color:rgba(255,255,255,.8);z-index:10;padding:0 24px}
+@media (orientation:portrait) and (pointer:coarse){#rotate{display:block}}
 .static *,.static *::before{animation:none!important;transition:none!important}
 .static .swoosh .draw{stroke-dashoffset:0!important}
 .static #hint{display:none}
@@ -532,7 +534,8 @@ body{font-family:"Rubik",sans-serif;color:#fff;-webkit-font-smoothing:antialiase
 </section>
 
 </div></div>
-<div id="hint">חץ שמאלה או רווח לשקף הבא · <span id="pg">1 / 8</span></div>
+<div id="hint"><span id="hint-t">חץ שמאלה או רווח לשקף הבא</span> · <span id="pg">1 / 8</span></div>
+<div id="rotate">לצפייה במסך מלא סובבו את הטלפון לרוחב<br>הקשה בצד שמאל של המסך מעבירה לשקף הבא</div>
 
 <script>window.LANDPAL=null;</script>
 <script>
@@ -542,7 +545,7 @@ body{font-family:"Rubik",sans-serif;color:#fff;-webkit-font-smoothing:antialiase
 
   /* scale the 1920x1080 stage to the window */
   var stage=document.getElementById('stage');
-  function fit(){stage.style.transform='scale('+Math.min(innerWidth/1920,innerHeight/1080)+')';}
+  function fit(){stage.style.transform='translate(-50%,-50%) scale('+Math.min(innerWidth/1920,innerHeight/1080)+')';}
   addEventListener('resize',fit);fit();
 
   /* procedural twilight mountains: smooth layered ridges with rim light and mist */
@@ -555,6 +558,10 @@ body{font-family:"Rubik",sans-serif;color:#fff;-webkit-font-smoothing:antialiase
     cloud:'205,190,235',rim:'232,224,255',mist:'190,180,225',vignette:'rgba(4,2,10,.6)',
     layers:[['#8f84b8','#3e3566'],['#5a4f85','#241d40'],['#2a2146','#130e24'],['#130c22','#07040e']]
   };
+  var OFF=document.createElement('canvas');OFF.width=1920;OFF.height=1080;var OFFX=OFF.getContext('2d');
+  /* older Safari ignores ctx.filter; probe it by blurring one dot and reading a pixel beside it */
+  var BLUR=(function(){try{var t=document.createElement('canvas');t.width=t.height=12;var x=t.getContext('2d');x.filter='blur(2px)';
+    x.fillRect(5,5,2,2);return x.getImageData(2,5,1,1).data[3]>0;}catch(e){return false;}})();
   function land(cv){
     var W=1920,H=1080,c=cv.getContext('2d'),r=rng(+cv.dataset.seed||7);
     var sky=c.createLinearGradient(0,0,0,H);
@@ -562,9 +569,16 @@ body{font-family:"Rubik",sans-serif;color:#fff;-webkit-font-smoothing:antialiase
     c.fillStyle=sky;c.fillRect(0,0,W,H);
     var g=c.createRadialGradient(540,600,30,540,600,900);P.glow.forEach(function(st){g.addColorStop(st[0],st[1]);});
     c.fillStyle=g;c.fillRect(0,0,W,H);
-    c.save();c.filter='blur(50px)';
-    for(var k=0;k<8;k++){c.fillStyle='rgba('+P.cloud+','+(.05+r()*.07)+')';c.beginPath();c.ellipse(r()*W,110+r()*330,300+r()*420,36+r()*50,0,0,Math.PI*2);c.fill();}
-    c.restore();
+    if(BLUR){
+      c.save();c.filter='blur(50px)';
+      for(var k=0;k<8;k++){c.fillStyle='rgba('+P.cloud+','+(.05+r()*.07)+')';c.beginPath();c.ellipse(r()*W,110+r()*330,300+r()*420,36+r()*50,0,0,Math.PI*2);c.fill();}
+      c.restore();
+    }else{ /* same clouds, same random sequence, soft edges from a radial gradient instead of a blur */
+      for(var k2=0;k2<8;k2++){var a=.05+r()*.07,cx=r()*W,cy=110+r()*330,rx=300+r()*420,ry=36+r()*50,R=rx+50;
+        c.save();c.translate(cx,cy);c.scale(1,(ry+50)/R);var gr=c.createRadialGradient(0,0,0,0,0,R);
+        gr.addColorStop(0,'rgba('+P.cloud+','+a+')');gr.addColorStop(.6,'rgba('+P.cloud+','+(a*.6)+')');gr.addColorStop(1,'rgba('+P.cloud+',0)');
+        c.fillStyle=gr;c.fillRect(-R,-R,R*2,R*2);c.restore();}
+    }
     /* smooth illustrated ridges, far to near, each with a soft rim light and mist at its foot */
     var layers=[
       {base:640,amp:300,fr:1/640,top:P.layers[0][0],bot:P.layers[0][1],rim:.7,blur:1.2,mist:.20},
@@ -578,7 +592,7 @@ body{font-family:"Rubik",sans-serif;color:#fff;-webkit-font-smoothing:antialiase
         var v=(1-Math.abs(o1(x*L.fr)*2-1))*.62+(1-Math.abs(o2(x*L.fr*2.2)*2-1))*.27+o3(x*L.fr*5)*.11;
         ys[x]=L.base-L.amp*Math.pow(v,1.25);
       }
-      var oc=document.createElement('canvas');oc.width=W;oc.height=H;var d=oc.getContext('2d');
+      var oc=OFF,d=OFFX;d.clearRect(0,0,W,H);
       var grd=d.createLinearGradient(0,L.base-L.amp,0,H);grd.addColorStop(0,L.top);grd.addColorStop(1,L.bot);
       d.fillStyle=grd;d.beginPath();d.moveTo(0,H);for(var x2=0;x2<=W;x2++)d.lineTo(x2,ys[x2]);d.lineTo(W,H);d.closePath();d.fill();
       d.strokeStyle='rgba('+P.rim+','+L.rim+')';d.lineWidth=2.2;d.beginPath();d.moveTo(0,ys[0]);for(var x3=1;x3<=W;x3++)d.lineTo(x3,ys[x3]);d.stroke();
@@ -627,7 +641,9 @@ body{font-family:"Rubik",sans-serif;color:#fff;-webkit-font-smoothing:antialiase
   });
   addEventListener('click',function(e){go(e.clientX<innerWidth/2?cur+1:cur-1);});
   go((parseInt((location.hash||'#1').slice(1),10)||1)-1);
-  setTimeout(function(){document.getElementById('hint').style.opacity=0;},4000);
+  var TOUCH=matchMedia('(pointer:coarse)').matches;
+  if(TOUCH)document.getElementById('hint-t').textContent='הקשה בצד שמאל לשקף הבא';
+  setTimeout(function(){document.getElementById('hint').style.opacity=0;},TOUCH?7000:4000);
 })();
 </script>
 </body>
